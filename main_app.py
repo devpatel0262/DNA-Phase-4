@@ -12,6 +12,7 @@ from pymysql.cursors import DictCursor
 from datetime import datetime, timedelta
 from decimal import Decimal
 import os
+from getpass import getpass
 
 
 # ============================================================================
@@ -98,28 +99,147 @@ def print_divider(width=78, char=None):
         print(f"{Style.CYAN}{Style.BOX_H * width}{Style.RESET}")
 
 
-def get_db_config():
-    """Returns database configuration dictionary."""
-    return {
-        'host': 'localhost',
-        'user': 'root',
-        'password': '',
-        'database': 'decentraland_db',
-        'charset': 'utf8mb4',
-        'cursorclass': DictCursor
-    }
+# Global credentials storage
+DB_CREDENTIALS = {
+    'user': None,
+    'password': None
+}
 
+# ---------------------------------------------------------------------------
+# Helper Functions for Enhanced CLI
+# ---------------------------------------------------------------------------
+
+def authenticate_user():
+    """Prompt for MySQL credentials and store them globally."""
+    print(f"{Style.CYAN}┌{'─' * 40}┐{Style.RESET}")
+    print(f"{Style.CYAN}│{Style.RESET} {Style.BOLD}{Style.MAGENTA}{'🔐 AUTHENTICATION':^38}{Style.RESET} {Style.CYAN}│{Style.RESET}")
+    print(f"{Style.CYAN}└{'─' * 40}┘{Style.RESET}\n")
+    print(f"{Style.INFO} Host is fixed to: {Style.BOLD}localhost{Style.RESET}\n")
+    while True:
+        user = input(f"{Style.CYAN}➤{Style.RESET} Enter MySQL Username: ").strip()
+        password = getpass(f"{Style.CYAN}➤{Style.RESET} Enter MySQL Password: ")
+        if user and password:
+            DB_CREDENTIALS['user'] = user
+            DB_CREDENTIALS['password'] = password
+            conn = get_connection()
+            if conn:
+                print(f"{Style.SUCCESS} Database connection successful!\n")
+                conn.close()
+                break
+            else:
+                print(f"{Style.ERROR} Connection failed. Please try again.\n")
+        else:
+            print(f"{Style.WARNING} Both username and password are required.\n")
 
 def get_connection():
-    """Establishes and returns a database connection."""
+    """Establishes and returns a database connection using stored credentials."""
     try:
-        config = get_db_config()
+        if DB_CREDENTIALS['user'] is None:
+            return None
+        config = {
+            'host': 'localhost',
+            'user': DB_CREDENTIALS['user'],
+            'password': DB_CREDENTIALS['password'],
+            'database': 'decentraland_db',
+            'charset': 'utf8mb4',
+            'cursorclass': DictCursor
+        }
         conn = pymysql.connect(**config)
         conn.autocommit = False
         return conn
     except pymysql.Error as e:
         print(f"\n{Style.ERROR} Database connection failed: {e}")
         return None
+
+def paginate_query(query, params=None, page_size=20):
+    """Yield results page by page for large result sets."""
+    conn = get_connection()
+    if not conn:
+        return
+    try:
+        with conn.cursor() as cursor:
+            offset = 0
+            while True:
+                paginated = f"{query} LIMIT {page_size} OFFSET {offset}"
+                cursor.execute(paginated, params or ())
+                rows = cursor.fetchall()
+                if not rows:
+                    break
+                yield rows
+                offset += page_size
+    finally:
+        conn.close()
+
+def display_paginated_results(rows_generator, title="Results"):
+    """Display paginated query results with navigation prompts."""
+    page_num = 1
+    for rows in rows_generator:
+        clear_screen()
+        print_box(f"{title} - Page {page_num}")
+        if rows:
+            columns = list(rows[0].keys())
+            print_table_header(columns)
+            for row in rows:
+                values = [format_value(row[col])[:20] for col in columns]
+                row_str = f"{Style.CYAN}{Style.BOX_V}{Style.RESET} " + \
+                          f" {Style.GRAY}{Style.BOX_V}{Style.RESET}".join(
+                              f"{Style.WHITE}{val:<20}{Style.RESET}" for val in values) + \
+                          f" {Style.CYAN}{Style.BOX_V}{Style.RESET}"
+                print(row_str)
+        else:
+            print(f"{Style.WARNING} No data to display.")
+        input(f"{Style.CYAN}➤{Style.RESET} Press Enter for next page (or Ctrl+C to stop)...")
+        page_num += 1
+
+def view_all_users():
+    """Display a list of all user profiles."""
+    query = "SELECT Wallet_Address, Username, Join_Date, Last_Seen FROM User_Profile ORDER BY Join_Date DESC"
+    rows_gen = paginate_query(query)
+    display_paginated_results(rows_gen, title="All Users")
+
+def view_all_assets():
+    """Display a list of all digital assets (land and wearables)."""
+    query = """
+        SELECT da.Asset_ID, da.Token_URI, da.Owner_Address, 
+               CASE WHEN lp.Asset_ID IS NOT NULL THEN 'Land' ELSE 'Wearable' END AS Asset_Type,
+               lp.X_Coordinate, lp.Y_Coordinate, w.Category, w.Rarity
+        FROM Digital_Asset da
+        LEFT JOIN LAND_Parcel lp ON da.Asset_ID = lp.Asset_ID
+        LEFT JOIN Wearable w ON da.Asset_ID = w.Asset_ID
+        ORDER BY da.Asset_ID
+    """
+    rows_gen = paginate_query(query)
+    display_paginated_results(rows_gen, title="All Digital Assets")
+
+def view_summary_stats():
+    """Show high‑level statistics about the mini‑world."""
+    conn = get_connection()
+    if not conn:
+        return
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT COUNT(*) AS total_users FROM User_Profile")
+            users = cursor.fetchone()['total_users']
+            cursor.execute("SELECT COUNT(*) AS total_assets FROM Digital_Asset")
+            assets = cursor.fetchone()['total_assets']
+            cursor.execute("SELECT COUNT(*) AS total_businesses FROM Business")
+            businesses = cursor.fetchone()['total_businesses']
+            cursor.execute("SELECT COUNT(*) AS total_events FROM Event")
+            events = cursor.fetchone()['total_events']
+        clear_screen()
+        print_box("📊 MINI‑WORLD SUMMARY")
+        print(f"{Style.GREEN}Users:{Style.RESET} {users}")
+        print(f"{Style.CYAN}Assets:{Style.RESET} {assets}")
+        print(f"{Style.MAGENTA}Businesses:{Style.RESET} {businesses}")
+        print(f"{Style.YELLOW}Events:{Style.RESET} {events}")
+        input(f"\n{Style.CYAN}➤{Style.RESET} Press Enter to return to menu...")
+    finally:
+        conn.close()
+
+# ---------------------------------------------------------------------------
+# Existing Functions (unchanged) – kept for reference
+# ---------------------------------------------------------------------------
+# ... (the rest of the file remains unchanged) ...
 
 
 def print_separator():
@@ -714,12 +834,31 @@ def main():
     clear_screen()
     print_banner()
     
-    conn = get_connection()
-    if conn:
-        print(f"{Style.SUCCESS} Database connection successful!\n")
-        conn.close()
-    else:
-        print(f"{Style.ERROR} Failed to connect to database. Please check configuration.\n")
+    print(f"{Style.CYAN}┌{'─' * 40}┐{Style.RESET}")
+    print(f"{Style.CYAN}│{Style.RESET} {Style.BOLD}{Style.MAGENTA}{'🔐 AUTHENTICATION':^38}{Style.RESET} {Style.CYAN}│{Style.RESET}")
+    print(f"{Style.CYAN}└{'─' * 40}┘{Style.RESET}\n")
+    
+    print(f"{Style.INFO} Host is fixed to: {Style.BOLD}localhost{Style.RESET}")
+    
+    try:
+        user = input(f"{Style.CYAN}➤{Style.RESET} Enter MySQL Username: ").strip()
+        password = getpass(f"{Style.CYAN}➤{Style.RESET} Enter MySQL Password: ")
+        
+        DB_CREDENTIALS['user'] = user
+        DB_CREDENTIALS['password'] = password
+        
+        print("\nConnecting to database...")
+        conn = get_connection()
+        
+        if conn:
+            print(f"{Style.SUCCESS} Database connection successful!\n")
+            conn.close()
+        else:
+            print(f"{Style.ERROR} Failed to connect to database. Please check credentials.\n")
+            return
+
+    except KeyboardInterrupt:
+        print("\nAuthentication cancelled.")
         return
     
     input(f"{Style.CYAN}➤{Style.RESET} Press Enter to continue...")
