@@ -62,6 +62,14 @@ class Style:
 A_ESCAPE = re.compile(r'\x1b\[[0-9;]*m')
 
 
+FIGLET_TITLE = """ ____                      _             _                 _ 
+|  _ \\  ___  ___ ___ _ __ | |_ _ __ __ _| | __ _ _ __   __| |
+| | | |/ _ \\/ __/ _ \\ '_ \\| __| '__/ _` | |/ _` | '_ \\ / _` |
+| |_| |  __/ (_|  __/ | | | |_| | | (_| | | (_| | | | | (_| |
+|____/ \\___|\\___\\___|_| |_|\\__|_|  \\__,_|_|\\__,_|_| |_|\\__,_|
+                                                             """
+
+
 def clear_screen():
     """Clears the terminal screen for a clean dashboard look."""
     os.system('clear' if os.name != 'nt' else 'cls')
@@ -69,9 +77,10 @@ def clear_screen():
 
 def print_banner():
     """Prints a minimal dashboard banner."""
-    title = f"{Style.BOLD}{Style.CYAN}Decentraland Database Management System{Style.RESET}"
     subtitle = f"{Style.MAGENTA}by team DataBreak{Style.RESET}"
-    print(f"\n{title}")
+    print()
+    for line in FIGLET_TITLE.splitlines():
+        print(f"{Style.BOLD}{Style.CYAN}{line}{Style.RESET}")
     print(subtitle)
 
 
