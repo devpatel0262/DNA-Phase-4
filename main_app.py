@@ -604,6 +604,127 @@ def voter_influence_report():
         conn.close()
 
 
+def reschedule_event():
+    """WRITE Operation 8: Reschedule an event by updating timestamps."""
+    print_box("RESCHEDULE EVENT")
+    
+    # First, show available events to reschedule
+    conn = get_connection()
+    if not conn:
+        return
+    
+    try:
+        with conn.cursor() as cursor:
+            # Show current events that can be rescheduled
+            query = """
+                SELECT 
+                    e.Event_ID,
+                    e.Event_Name,
+                    e.Start_Timestamp,
+                    e.End_Timestamp,
+                    e.Organizer_Address,
+                    u.Username as organizer_name
+                FROM Event e
+                LEFT JOIN User_Profile u ON e.Organizer_Address = u.Wallet_Address
+                WHERE e.Start_Timestamp > NOW()
+                ORDER BY e.Start_Timestamp ASC
+            """
+            cursor.execute(query)
+            events = cursor.fetchall()
+            
+            if not events:
+                print(f"\n{Style.WARNING} No upcoming events available to reschedule.")
+                return
+            
+            print(f"\n{Style.INFO} Available events to reschedule:\n")
+            for idx, event in enumerate(events, 1):
+                start_time = event['Start_Timestamp'].strftime('%Y-%m-%d %H:%M:%S')
+                end_time = event['End_Timestamp'].strftime('%Y-%m-%d %H:%M:%S')
+                organizer = event['organizer_name'] or event['Organizer_Address'][:10] + '...'
+                
+                print(f"  {Style.GREEN}{idx}.{Style.RESET} {Style.BOLD}{event['Event_Name']}{Style.RESET}")
+                print(f"     {Style.GRAY}ID: {event['Event_ID']} | Organizer: {organizer}{Style.RESET}")
+                print(f"     {Style.CYAN}Current: {start_time} → {end_time}{Style.RESET}\n")
+            
+            # Get event selection
+            try:
+                choice = int(input(f"{Style.CYAN}>{Style.RESET} Select event number to reschedule (1-{len(events)}): "))
+                if choice < 1 or choice > len(events):
+                    print(f"{Style.ERROR} Invalid selection.")
+                    return
+                
+                selected_event = events[choice - 1]
+                event_id = selected_event['Event_ID']
+                
+                print(f"\n{Style.INFO} Rescheduling: {Style.BOLD}{selected_event['Event_Name']}{Style.RESET}")
+                
+                # Get new start datetime
+                print(f"\n{Style.CYAN}Enter new start time:{Style.RESET}")
+                start_date = input(f"{Style.CYAN}>{Style.RESET} Date (YYYY-MM-DD): ").strip()
+                start_time = input(f"{Style.CYAN}>{Style.RESET} Time (HH:MM): ").strip()
+                
+                # Get new end datetime  
+                print(f"\n{Style.CYAN}Enter new end time:{Style.RESET}")
+                end_date = input(f"{Style.CYAN}>{Style.RESET} Date (YYYY-MM-DD): ").strip()
+                end_time = input(f"{Style.CYAN}>{Style.RESET} Time (HH:MM): ").strip()
+                
+                # Validate datetime format
+                try:
+                    new_start = datetime.strptime(f"{start_date} {start_time}:00", "%Y-%m-%d %H:%M:%S")
+                    new_end = datetime.strptime(f"{end_date} {end_time}:00", "%Y-%m-%d %H:%M:%S")
+                    
+                    # Validate that end > start (this will test our CHECK constraint)
+                    if new_end <= new_start:
+                        print(f"{Style.ERROR} End time must be after start time.")
+                        return
+                    
+                    # Validate that start time is in the future
+                    if new_start <= datetime.now():
+                        print(f"{Style.ERROR} Start time must be in the future.")
+                        return
+                        
+                except ValueError as e:
+                    print(f"{Style.ERROR} Invalid datetime format. Use YYYY-MM-DD and HH:MM.")
+                    return
+                
+                # Update the event
+                update_query = """
+                    UPDATE Event 
+                    SET Start_Timestamp = %s, End_Timestamp = %s
+                    WHERE Event_ID = %s
+                """
+                
+                cursor.execute(update_query, (new_start, new_end, event_id))
+                
+                if cursor.rowcount > 0:
+                    conn.commit()
+                    print(f"\n{Style.SUCCESS} Event '{selected_event['Event_Name']}' successfully rescheduled!")
+                    print(f"{Style.INFO} New schedule:")
+                    print(f"  {Style.GREEN}Start:{Style.RESET} {new_start.strftime('%Y-%m-%d %H:%M:%S')}")
+                    print(f"  {Style.GREEN}End:{Style.RESET}   {new_end.strftime('%Y-%m-%d %H:%M:%S')}")
+                    
+                    # Show duration
+                    duration = new_end - new_start
+                    hours = duration.seconds // 3600
+                    minutes = (duration.seconds % 3600) // 60
+                    print(f"  {Style.CYAN}Duration:{Style.RESET} {duration.days} day(s), {hours} hour(s), {minutes} minute(s)")
+                else:
+                    print(f"{Style.ERROR} Failed to reschedule event.")
+                    
+            except ValueError:
+                print(f"{Style.ERROR} Please enter a valid number.")
+                return
+            
+    except pymysql.Error as e:
+        print(f"{Style.ERROR} Database error: {e}")
+        if conn:
+            conn.rollback()
+    
+    finally:
+        if conn:
+            conn.close()
+
+
 def register_new_business():
     """WRITE Operation 6: Register a new business."""
     print_box("REGISTER NEW BUSINESS")
@@ -903,8 +1024,9 @@ def display_menu():
         f"{Style.GREEN}5.{Style.RESET} {Style.WHITE}Voter influence report{Style.RESET}",
         f"{Style.YELLOW}6.{Style.RESET} {Style.WHITE}Register new business{Style.RESET}",
         f"{Style.YELLOW}7.{Style.RESET} {Style.WHITE}Record an asset sale transaction{Style.RESET}",
-        f"{Style.RED}8.{Style.RESET} {Style.WHITE}Delete a user{Style.RESET}",
-        f"{Style.MAGENTA}9.{Style.RESET} {Style.WHITE}Custom SQL query{Style.RESET}",
+        f"{Style.YELLOW}8.{Style.RESET} {Style.WHITE}Reschedule an event{Style.RESET}",
+        f"{Style.RED}9.{Style.RESET} {Style.WHITE}Delete a user{Style.RESET}",
+        f"{Style.MAGENTA}10.{Style.RESET} {Style.WHITE}Custom SQL query{Style.RESET}",
         f"{Style.GRAY}q.{Style.RESET} {Style.WHITE}Quit{Style.RESET}"
     ]
     for item in menu_items:
@@ -966,8 +1088,10 @@ def main():
         elif choice == '7':
             record_asset_sale()
         elif choice == '8':
-            delete_user()
+            reschedule_event()
         elif choice == '9':
+            delete_user()
+        elif choice == '10':
             custom_sql_query()
         elif choice == 'q':
             print(f"\n{Style.CYAN}{'═' * 80}{Style.RESET}")
