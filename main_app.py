@@ -1095,7 +1095,7 @@ def main():
             custom_sql_query()
         elif choice == 'q':
             print(f"\n{Style.CYAN}{'═' * 80}{Style.RESET}")
-            print(f"{Style.MAGENTA}{Style.BOLD}{'Thank you for using MINI WORLD - GENESIS CITY!':^80}{Style.RESET}")
+            print(f"{Style.MAGENTA}{Style.BOLD}{'Thank you for using Decentraland DBMS!':^80}{Style.RESET}")
             print(f"{Style.GREEN}{'Goodbye!':^80}{Style.RESET}")
             print(f"{Style.CYAN}{'═' * 80}{Style.RESET}\n")
             break
