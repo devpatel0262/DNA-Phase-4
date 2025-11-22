@@ -12,6 +12,7 @@ from pymysql.cursors import DictCursor
 from datetime import datetime, timedelta
 from decimal import Decimal
 import os
+import re
 from getpass import getpass
 
 
@@ -58,37 +59,45 @@ class Style:
     BOX_CROSS = '┼'
 
 
+A_ESCAPE = re.compile(r'\x1b\[[0-9;]*m')
+
+
 def clear_screen():
     """Clears the terminal screen for a clean dashboard look."""
     os.system('clear' if os.name != 'nt' else 'cls')
 
 
 def print_banner():
-    """Prints ASCII art banner for Genesis City."""
-    banner = f"""
-{Style.CYAN}{Style.BOLD}
-    ╔═══════════════════════════════════════════════════════════════════════════╗
-    ║                                                                           ║
-    ║   ██████╗ ███████╗███╗   ██╗███████╗███████╗██╗███████╗     ██████╗██╗  ║
-    ║  ██╔════╝ ██╔════╝████╗  ██║██╔════╝██╔════╝██║██╔════╝    ██╔════╝╚██╗ ║
-    ║  ██║  ███╗█████╗  ██╔██╗ ██║█████╗  ███████╗██║███████╗    ██║      ██║ ║
-    ║  ██║   ██║██╔══╝  ██║╚██╗██║██╔══╝  ╚════██║██║╚════██║    ██║      ██║ ║
-    ║  ╚██████╔╝███████╗██║ ╚████║███████╗███████║██║███████║    ╚██████╗██╔╝ ║
-    ║   ╚═════╝ ╚══════╝╚═╝  ╚═══╝╚══════╝╚══════╝╚═╝╚══════╝     ╚═════╝╚═╝  ║
-    ║                                                                           ║
-    ║              {Style.MAGENTA}⚡ CITY MANAGEMENT SYSTEM ⚡{Style.CYAN}                           ║
-    ║          {Style.GREEN}Metaverse • Digital Assets • DAO Governance{Style.CYAN}                  ║
-    ║                                                                           ║
-    ╚═══════════════════════════════════════════════════════════════════════════╝
-{Style.RESET}"""
-    print(banner)
+    """Prints a minimal dashboard banner."""
+    title = f"{Style.BOLD}{Style.CYAN}Decentraland Database Management System{Style.RESET}"
+    subtitle = f"{Style.MAGENTA}by team DataBreak{Style.RESET}"
+    print(f"\n{title}")
+    print(subtitle)
+
+
+def visual_length(text):
+    """Return printable length of text without ANSI escape sequences."""
+    return len(A_ESCAPE.sub('', text))
 
 
 def print_box(title, width=78):
     """Prints a fancy box header with title."""
-    print(f"\n{Style.CYAN}{Style.BOX_TL}{Style.BOX_H * (width - 2)}{Style.BOX_TR}{Style.RESET}")
-    print(f"{Style.CYAN}{Style.BOX_V}{Style.BOLD}{Style.MAGENTA} {title.center(width - 4)} {Style.CYAN}{Style.BOX_V}{Style.RESET}")
-    print(f"{Style.CYAN}{Style.BOX_BL}{Style.BOX_H * (width - 2)}{Style.BOX_BR}{Style.RESET}\n")
+    inner = width - 2
+    centered = title.center(inner)
+    print(f"\n{Style.CYAN}{Style.BOX_TL}{Style.BOX_H * inner}{Style.BOX_TR}{Style.RESET}")
+    print(f"{Style.CYAN}{Style.BOX_V}{Style.RESET}{Style.BOLD}{Style.MAGENTA}{centered}{Style.RESET}{Style.CYAN}{Style.BOX_V}{Style.RESET}")
+    print(f"{Style.CYAN}{Style.BOX_BL}{Style.BOX_H * inner}{Style.BOX_BR}{Style.RESET}\n")
+
+
+def print_box_line(content="", width=78):
+    """Print a content line inside a box with proper padding."""
+    inner = width - 2
+    visible = visual_length(content)
+    if visible > inner:
+        content = content[:inner]
+        visible = inner
+    padding = inner - visible
+    print(f"{Style.CYAN}{Style.BOX_V}{Style.RESET}{content}{' ' * padding}{Style.CYAN}{Style.BOX_V}{Style.RESET}")
 
 
 def print_divider(width=78, char=None):
@@ -112,7 +121,7 @@ DB_CREDENTIALS = {
 def authenticate_user():
     """Prompt for MySQL credentials and store them globally."""
     print(f"{Style.CYAN}┌{'─' * 40}┐{Style.RESET}")
-    print(f"{Style.CYAN}│{Style.RESET} {Style.BOLD}{Style.MAGENTA}{'🔐 AUTHENTICATION':^38}{Style.RESET} {Style.CYAN}│{Style.RESET}")
+    print(f"{Style.CYAN}│{Style.RESET} {Style.BOLD}{Style.MAGENTA}{'AUTHENTICATION':^38}{Style.RESET} {Style.CYAN}│{Style.RESET}")
     print(f"{Style.CYAN}└{'─' * 40}┘{Style.RESET}\n")
     print(f"{Style.INFO} Host is fixed to: {Style.BOLD}localhost{Style.RESET}\n")
     while True:
@@ -174,7 +183,6 @@ def display_paginated_results(rows_generator, title="Results"):
     """Display paginated query results with navigation prompts."""
     page_num = 1
     for rows in rows_generator:
-        clear_screen()
         print_box(f"{title} - Page {page_num}")
         if rows:
             columns = list(rows[0].keys())
@@ -808,14 +816,13 @@ def custom_sql_query():
 
 def display_menu():
     """Displays the main menu."""
-    clear_screen()
     print_banner()
     
     print(f"\n{Style.CYAN}┌{'─' * 76}┐{Style.RESET}")
-    print(f"{Style.CYAN}│{Style.RESET} {Style.BOLD}{Style.MAGENTA}{'📋 MAIN MENU':^76}{Style.RESET} {Style.CYAN}│{Style.RESET}")
+    print(f"{Style.CYAN}│{Style.RESET} {Style.BOLD}{Style.MAGENTA}{'MAIN MENU':^74}{Style.RESET} {Style.CYAN}│{Style.RESET}")
     print(f"{Style.CYAN}├{'─' * 76}┤{Style.RESET}")
     print(f"{Style.CYAN}│{Style.RESET}                                                                            {Style.CYAN}│{Style.RESET}")
-    print(f"{Style.CYAN}│{Style.RESET}  {Style.GREEN}1.{Style.RESET} {Style.WHITE}View all DAO proposals by a user{Style.RESET}{' ' * 38}{Style.CYAN}│{Style.RESET}")
+    print(f"{Style.CYAN}│{Style.RESET}  {Style.GREEN}1.{Style.RESET} {Style.WHITE}View all DAO proposals by a user{Style.RESET}{' ' * 39}{Style.CYAN}│{Style.RESET}")
     print(f"{Style.CYAN}│{Style.RESET}  {Style.GREEN}2.{Style.RESET} {Style.WHITE}List businesses established after a date{Style.RESET}{' ' * 31}{Style.CYAN}│{Style.RESET}")
     print(f"{Style.CYAN}│{Style.RESET}  {Style.GREEN}3.{Style.RESET} {Style.WHITE}Total MANA land sales in the last quarter{Style.RESET}{' ' * 30}{Style.CYAN}│{Style.RESET}")
     print(f"{Style.CYAN}│{Style.RESET}  {Style.GREEN}4.{Style.RESET} {Style.WHITE}Search events by name keyword{Style.RESET}{' ' * 42}{Style.CYAN}│{Style.RESET}")
@@ -835,7 +842,7 @@ def main():
     print_banner()
     
     print(f"{Style.CYAN}┌{'─' * 40}┐{Style.RESET}")
-    print(f"{Style.CYAN}│{Style.RESET} {Style.BOLD}{Style.MAGENTA}{'🔐 AUTHENTICATION':^38}{Style.RESET} {Style.CYAN}│{Style.RESET}")
+    print(f"{Style.CYAN}│{Style.RESET} {Style.BOLD}{Style.MAGENTA}{'AUTHENTICATION':^38}{Style.RESET} {Style.CYAN}│{Style.RESET}")
     print(f"{Style.CYAN}└{'─' * 40}┘{Style.RESET}\n")
     
     print(f"{Style.INFO} Host is fixed to: {Style.BOLD}localhost{Style.RESET}")
@@ -886,7 +893,6 @@ def main():
         elif choice == '9':
             custom_sql_query()
         elif choice == 'q':
-            clear_screen()
             print(f"\n{Style.CYAN}{'═' * 80}{Style.RESET}")
             print(f"{Style.MAGENTA}{Style.BOLD}{'👋 Thank you for using MINI WORLD - GENESIS CITY!':^80}{Style.RESET}")
             print(f"{Style.GREEN}{'Goodbye!':^80}{Style.RESET}")
