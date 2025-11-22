@@ -987,9 +987,20 @@ def delete_user():
 def custom_sql_query():
     """Execute a custom SQL query."""
     print_box("CUSTOM SQL QUERY")
-    print(f"{Style.WARNING} Use with caution. Only SELECT queries recommended.\n")
+    print(f"{Style.WARNING} Use with caution. Only SELECT queries recommended.")
+    print(f"{Style.INFO} Multi-line queries supported. End with semicolon (;) and press Enter.\n")
     
-    query = input(f"{Style.CYAN}>{Style.RESET} Enter SQL query: ").strip()
+    # Collect multi-line input
+    print(f"{Style.CYAN}>{Style.RESET} Enter SQL query:")
+    lines = []
+    while True:
+        line = input()
+        lines.append(line)
+        # Check if the line ends with semicolon
+        if line.strip().endswith(';'):
+            break
+    
+    query = '\n'.join(lines).strip()
     
     if not query:
         print(f"{Style.ERROR} Query cannot be empty.")
