@@ -116,8 +116,8 @@ INSERT INTO Business (Business_Name, Business_Type, Date_Established, Owner_Addr
 ('WonderMine Crafting', 'Shop', '2020-06-01', '0x8888888888888888888888888888888888888888', 'LAND-002'),
 ('ICE Poker VIP Room', 'Venue', '2022-03-15', '0x4444444444444444444444444444444444444444', 'LAND-003'),
 ('Samsung 837Y Gallery', 'Gallery', '2023-01-01', '0x5555555555555555555555555555555555555555', 'LAND-004'),
-('Abandoned Nightclub', 'Venue', '2018-05-10', NULL, 'LAND-000'),
-('Ghost Mall', 'Shop', '2019-01-01', NULL, 'LAND-000');
+('Abandoned Nightclub', 'Venue', '2018-05-10', NULL, 'LAND-005'),
+('Ghost Mall', 'Shop', '2019-01-01', NULL, 'LAND-006');
 
 -- Scene Content
 INSERT INTO Scene_Content (Parcel_ID, Scene_Version, Description, Deployment_Date, Creator_Address) VALUES

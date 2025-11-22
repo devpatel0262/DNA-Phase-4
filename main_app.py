@@ -750,22 +750,46 @@ def register_new_business():
                 print(f"{Style.ERROR} User with wallet {Style.CYAN}{owner_address}{Style.RESET} does not exist.")
                 return
             
-            # Get a land parcel owned by this user
+            # Get all land parcels owned by this user
             parcel_query = """
-                SELECT lp.Asset_ID 
+                SELECT lp.Asset_ID, lp.X_Coordinate, lp.Y_Coordinate, lp.District_Name
                 FROM LAND_Parcel lp
                 JOIN Digital_Asset da ON lp.Asset_ID = da.Asset_ID
                 WHERE da.Owner_Address = %s
-                LIMIT 1
+                ORDER BY lp.Asset_ID
             """
             cursor.execute(parcel_query, (owner_address,))
-            parcel = cursor.fetchone()
+            parcels = cursor.fetchall()
             
-            if not parcel:
+            if not parcels:
                 print(f"{Style.ERROR} User must own at least one land parcel to register a business.")
                 return
             
-            parcel_id = parcel['Asset_ID']
+            # Show available parcels and let user choose
+            print(f"\n{Style.INFO} Available land parcels owned by {Style.CYAN}{owner_address[:10]}...{Style.RESET}:\n")
+            
+            for idx, parcel in enumerate(parcels, 1):
+                district = parcel['District_Name'] or "Uncharted Territory"
+                coords = f"({parcel['X_Coordinate']}, {parcel['Y_Coordinate']})"
+                
+                print(f"  {Style.GREEN}{idx}.{Style.RESET} {Style.BOLD}{parcel['Asset_ID']}{Style.RESET}")
+                print(f"     {Style.GRAY}Location: {coords} | District: {district}{Style.RESET}\n")
+            
+            # Get user's parcel choice
+            try:
+                choice = int(input(f"{Style.CYAN}>{Style.RESET} Select parcel number for business (1-{len(parcels)}): "))
+                if choice < 1 or choice > len(parcels):
+                    print(f"{Style.ERROR} Invalid selection.")
+                    return
+                
+                selected_parcel = parcels[choice - 1]
+                parcel_id = selected_parcel['Asset_ID']
+                
+                print(f"\n{Style.INFO} Business will be registered on parcel {Style.YELLOW}{parcel_id}{Style.RESET}")
+                
+            except ValueError:
+                print(f"{Style.ERROR} Please enter a valid number.")
+                return
             
             insert_query = """
                 INSERT INTO Business (Business_Name, Business_Type, Owner_Address, Date_Established, Parcel_ID)
