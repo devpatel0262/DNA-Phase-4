@@ -93,11 +93,51 @@ def print_box_line(content="", width=78):
     """Print a content line inside a box with proper padding."""
     inner = width - 2
     visible = visual_length(content)
-    if visible > inner:
-        content = content[:inner]
-        visible = inner
-    padding = inner - visible
+    padding = inner - visible if visible < inner else 0
     print(f"{Style.CYAN}{Style.BOX_V}{Style.RESET}{content}{' ' * padding}{Style.CYAN}{Style.BOX_V}{Style.RESET}")
+
+
+def print_box_separator(width=78):
+    """Prints a horizontal separator inside a box."""
+    inner = width - 2
+    print(f"{Style.CYAN}{Style.BOX_VR}{Style.BOX_H * inner}{Style.BOX_VL}{Style.RESET}")
+
+
+def pad_colored(text, width):
+    """Pad text that may contain ANSI sequences to a visible width."""
+    visible = visual_length(text)
+    if visible >= width:
+        return text
+    return text + (' ' * (width - visible))
+
+
+def build_table_row(values, widths):
+    """Construct a formatted table row with ANSI-safe padding."""
+    padded = [pad_colored(val, width) for val, width in zip(values, widths)]
+    return (
+        f"{Style.CYAN}{Style.BOX_V}{Style.RESET} "
+        + f" {Style.GRAY}{Style.BOX_V}{Style.RESET}".join(padded)
+        + f" {Style.CYAN}{Style.BOX_V}{Style.RESET}"
+    )
+
+
+def print_table_border(inner_width, top=True):
+    """Print the top or bottom border for a table based on inner width."""
+    left = Style.BOX_TL if top else Style.BOX_BL
+    right = Style.BOX_TR if top else Style.BOX_BR
+    print(f"{Style.CYAN}{left}{Style.BOX_H * inner_width}{right}{Style.RESET}")
+
+
+def compute_column_widths(columns, rows):
+    """Compute ANSI-safe widths for table columns based on data."""
+    widths = []
+    for col in columns:
+        max_len = len(str(col))
+        for row in rows:
+            value = format_value(row.get(col))
+            max_len = max(max_len, visual_length(str(value)))
+        widths.append(max_len + 2)
+    return widths
 
 
 def print_divider(width=78, char=None):
@@ -125,8 +165,8 @@ def authenticate_user():
     print(f"{Style.CYAN}└{'─' * 40}┘{Style.RESET}\n")
     print(f"{Style.INFO} Host is fixed to: {Style.BOLD}localhost{Style.RESET}\n")
     while True:
-        user = input(f"{Style.CYAN}➤{Style.RESET} Enter MySQL Username: ").strip()
-        password = getpass(f"{Style.CYAN}➤{Style.RESET} Enter MySQL Password: ")
+        user = input(f"{Style.CYAN}>{Style.RESET} Enter MySQL Username: ").strip()
+        password = getpass(f"{Style.CYAN}>{Style.RESET} Enter MySQL Password: ")
         if user and password:
             DB_CREDENTIALS['user'] = user
             DB_CREDENTIALS['password'] = password
@@ -186,17 +226,15 @@ def display_paginated_results(rows_generator, title="Results"):
         print_box(f"{title} - Page {page_num}")
         if rows:
             columns = list(rows[0].keys())
-            print_table_header(columns)
+            widths = compute_column_widths(columns, rows)
+            inner_width = print_table_header(columns, widths)
             for row in rows:
-                values = [format_value(row[col])[:20] for col in columns]
-                row_str = f"{Style.CYAN}{Style.BOX_V}{Style.RESET} " + \
-                          f" {Style.GRAY}{Style.BOX_V}{Style.RESET}".join(
-                              f"{Style.WHITE}{val:<20}{Style.RESET}" for val in values) + \
-                          f" {Style.CYAN}{Style.BOX_V}{Style.RESET}"
-                print(row_str)
+                values = [f"{Style.WHITE}{format_value(row[col])}{Style.RESET}" for col in columns]
+                print(build_table_row(values, widths))
+            print_table_footer(inner_width)
         else:
             print(f"{Style.WARNING} No data to display.")
-        input(f"{Style.CYAN}➤{Style.RESET} Press Enter for next page (or Ctrl+C to stop)...")
+        input(f"{Style.CYAN}>{Style.RESET} Press Enter for next page (or Ctrl+C to stop)...")
         page_num += 1
 
 def view_all_users():
@@ -234,13 +272,12 @@ def view_summary_stats():
             businesses = cursor.fetchone()['total_businesses']
             cursor.execute("SELECT COUNT(*) AS total_events FROM Event")
             events = cursor.fetchone()['total_events']
-        clear_screen()
-        print_box("📊 MINI‑WORLD SUMMARY")
+        print_box("MINI-WORLD SUMMARY")
         print(f"{Style.GREEN}Users:{Style.RESET} {users}")
         print(f"{Style.CYAN}Assets:{Style.RESET} {assets}")
         print(f"{Style.MAGENTA}Businesses:{Style.RESET} {businesses}")
         print(f"{Style.YELLOW}Events:{Style.RESET} {events}")
-        input(f"\n{Style.CYAN}➤{Style.RESET} Press Enter to return to menu...")
+        input(f"\n{Style.CYAN}>{Style.RESET} Press Enter to return to menu...")
     finally:
         conn.close()
 
@@ -255,13 +292,20 @@ def print_separator():
     print(f"{Style.CYAN}{'═' * 80}{Style.RESET}")
 
 
-def print_table_header(columns):
+def print_table_header(columns, widths):
     """Prints formatted table headers with cyberpunk styling."""
-    header = f"{Style.CYAN}{Style.BOX_V}{Style.RESET} " + f" {Style.GRAY}{Style.BOX_V}{Style.RESET} ".join(f"{Style.BOLD}{Style.GREEN}{col:<20}{Style.RESET}" for col in columns) + f" {Style.CYAN}{Style.BOX_V}{Style.RESET}"
-    separator = f"{Style.CYAN}{Style.BOX_VR}{Style.BOX_H * (len(columns) * 23 + len(columns))}{Style.BOX_VL}{Style.RESET}"
-    print(separator)
-    print(header)
-    print(separator)
+    header_cells = [f"{Style.BOLD}{Style.GREEN}{col}{Style.RESET}" for col in columns]
+    header_row = build_table_row(header_cells, widths)
+    inner_width = visual_length(header_row) - 2
+    print_table_border(inner_width, top=True)
+    print(header_row)
+    print(f"{Style.CYAN}{Style.BOX_VR}{Style.BOX_H * inner_width}{Style.BOX_VL}{Style.RESET}")
+    return inner_width
+
+
+def print_table_footer(inner_width):
+    """Print a bottom border for tables."""
+    print_table_border(inner_width, top=False)
 
 
 def format_value(value):
@@ -278,9 +322,9 @@ def format_value(value):
 
 def view_dao_proposals_by_user():
     """READ Operation 1: List all DAO proposals created by a specific user."""
-    print_box("📋 VIEW DAO PROPOSALS BY USER")
+    print_box("VIEW DAO PROPOSALS BY USER")
     
-    wallet = input(f"{Style.CYAN}➤{Style.RESET} Enter creator wallet address: ").strip()
+    wallet = input(f"{Style.CYAN}>{Style.RESET} Enter creator wallet address: ").strip()
     
     if not wallet:
         print(f"{Style.ERROR} Wallet address cannot be empty.")
@@ -325,9 +369,9 @@ def view_dao_proposals_by_user():
 
 def list_businesses_after_date():
     """READ Operation 2: List businesses established after a given date."""
-    print_box("🏢 LIST BUSINESSES ESTABLISHED AFTER DATE")
+    print_box("LIST BUSINESSES ESTABLISHED AFTER DATE")
     
-    date_str = input(f"{Style.CYAN}➤{Style.RESET} Enter date (YYYY-MM-DD): ").strip()
+    date_str = input(f"{Style.CYAN}>{Style.RESET} Enter date (YYYY-MM-DD): ").strip()
     
     try:
         datetime.strptime(date_str, "%Y-%m-%d")
@@ -379,7 +423,7 @@ def list_businesses_after_date():
 
 def total_land_sales_last_quarter():
     """READ Operation 3: Calculate total MANA land sales in the last quarter."""
-    print_box("💰 TOTAL LAND SALES (LAST QUARTER)")
+    print_box("TOTAL LAND SALES (LAST QUARTER)")
     
     conn = get_connection()
     if not conn:
@@ -403,21 +447,25 @@ def total_land_sales_last_quarter():
             cursor.execute(query, (three_months_ago,))
             result = cursor.fetchone()
             
-            print(f"\n{Style.CYAN}┌{'─' * 76}┐{Style.RESET}")
-            print(f"{Style.CYAN}│{Style.RESET} {Style.BOLD}{Style.MAGENTA}📊 Land Sales Report (Last 90 Days){Style.RESET}{' ' * 40}{Style.CYAN}│{Style.RESET}")
-            print(f"{Style.CYAN}│{Style.RESET}    {Style.GRAY}Period:{Style.RESET} {three_months_ago.strftime('%Y-%m-%d')} to {datetime.now().strftime('%Y-%m-%d')}{' ' * 21}{Style.CYAN}│{Style.RESET}")
-            print(f"{Style.CYAN}├{'─' * 76}┤{Style.RESET}")
+            width = 80
+            print(f"\n{Style.CYAN}{Style.BOX_TL}{Style.BOX_H * (width - 2)}{Style.BOX_TR}{Style.RESET}")
+            print_box_line(f"{Style.BOLD}{Style.MAGENTA}Land Sales Report (Last 90 Days){Style.RESET}", width)
+            print_box_line(
+                f"{Style.GRAY}Period:{Style.RESET} {three_months_ago.strftime('%Y-%m-%d')} to {datetime.now().strftime('%Y-%m-%d')}",
+                width
+            )
+            print_box_separator(width)
             
             if result['total_sales'] == 0:
-                print(f"{Style.CYAN}│{Style.RESET} {Style.WARNING} No land sales in the last quarter.{' ' * 35}{Style.CYAN}│{Style.RESET}")
+                print_box_line(f"{Style.WARNING} No land sales in the last quarter.", width)
             else:
-                print(f"{Style.CYAN}│{Style.RESET}  {Style.GREEN}Total Sales:{Style.RESET} {Style.BOLD}{Style.WHITE}{result['total_sales']}{Style.RESET}{' ' * (58 - len(str(result['total_sales'])))}{Style.CYAN}│{Style.RESET}")
-                print(f"{Style.CYAN}│{Style.RESET}  {Style.GREEN}Total MANA:{Style.RESET} {Style.BOLD}{Style.YELLOW}{format_value(result['total_mana'])}{Style.RESET}{' ' * (58 - len(format_value(result['total_mana'])))}{Style.CYAN}│{Style.RESET}")
-                print(f"{Style.CYAN}│{Style.RESET}  {Style.GREEN}Average Price:{Style.RESET} {Style.YELLOW}{format_value(result['avg_price'])}{Style.RESET}{' ' * (55 - len(format_value(result['avg_price'])))}{Style.CYAN}│{Style.RESET}")
-                print(f"{Style.CYAN}│{Style.RESET}  {Style.GREEN}Min Price:{Style.RESET} {Style.YELLOW}{format_value(result['min_price'])}{Style.RESET}{' ' * (59 - len(format_value(result['min_price'])))}{Style.CYAN}│{Style.RESET}")
-                print(f"{Style.CYAN}│{Style.RESET}  {Style.GREEN}Max Price:{Style.RESET} {Style.YELLOW}{format_value(result['max_price'])}{Style.RESET}{' ' * (59 - len(format_value(result['max_price'])))}{Style.CYAN}│{Style.RESET}")
+                print_box_line(f"{Style.GREEN}Total Sales:{Style.RESET} {Style.WHITE}{result['total_sales']}{Style.RESET}", width)
+                print_box_line(f"{Style.GREEN}Total MANA:{Style.RESET} {Style.YELLOW}{format_value(result['total_mana'])}{Style.RESET}", width)
+                print_box_line(f"{Style.GREEN}Average Price:{Style.RESET} {Style.YELLOW}{format_value(result['avg_price'])}{Style.RESET}", width)
+                print_box_line(f"{Style.GREEN}Min Price:{Style.RESET} {Style.YELLOW}{format_value(result['min_price'])}{Style.RESET}", width)
+                print_box_line(f"{Style.GREEN}Max Price:{Style.RESET} {Style.YELLOW}{format_value(result['max_price'])}{Style.RESET}", width)
             
-            print(f"{Style.CYAN}└{'─' * 76}┘{Style.RESET}")
+            print(f"{Style.CYAN}{Style.BOX_BL}{Style.BOX_H * (width - 2)}{Style.BOX_BR}{Style.RESET}")
     
     except pymysql.Error as e:
         print(f"{Style.ERROR} Database error: {e}")
@@ -427,9 +475,9 @@ def total_land_sales_last_quarter():
 
 def search_events_by_name():
     """READ Operation 4: Search events by partial name match."""
-    print_box("🎉 SEARCH EVENTS BY NAME")
+    print_box("SEARCH EVENTS BY NAME")
     
-    keyword = input(f"{Style.CYAN}➤{Style.RESET} Enter event name keyword: ").strip()
+    keyword = input(f"{Style.CYAN}>{Style.RESET} Enter event name keyword: ").strip()
     
     if not keyword:
         print(f"{Style.ERROR} Keyword cannot be empty.")
@@ -485,7 +533,7 @@ def search_events_by_name():
 
 def voter_influence_report():
     """READ Operation 5: Generate voter influence report (land owned + votes cast)."""
-    print_box("📊 VOTER INFLUENCE REPORT")
+    print_box("VOTER INFLUENCE REPORT")
     
     conn = get_connection()
     if not conn:
@@ -517,15 +565,29 @@ def voter_influence_report():
                 print(f"\n{Style.WARNING} No voter activity found.")
             else:
                 print(f"\n{Style.SUCCESS} Top {Style.GREEN}{Style.BOLD}{len(results)}{Style.RESET} Most Influential Voters:\n")
-                print(f"{Style.CYAN}┌{'─' * 76}┐{Style.RESET}")
-                print(f"{Style.CYAN}│{Style.RESET} {Style.BOLD}{Style.GREEN}{'Rank':<6}{Style.RESET} {Style.BOLD}{Style.GREEN}{'Username':<22}{Style.RESET} {Style.BOLD}{Style.GREEN}{'Land':<8}{Style.RESET} {Style.BOLD}{Style.GREEN}{'Votes':<8}{Style.RESET} {Style.BOLD}{Style.GREEN}{'Score':<8}{Style.RESET} {Style.CYAN}│{Style.RESET}")
-                print(f"{Style.CYAN}├{'─' * 76}┤{Style.RESET}")
-                
+                columns = ["Rank", "Username", "Land", "Votes", "Score"]
+                width_rows = []
+                for idx, row in enumerate(results, 1):
+                    width_rows.append({
+                        "Rank": str(idx),
+                        "Username": row['Username'] or "Unknown",
+                        "Land": str(row['land_parcels_owned']),
+                        "Votes": str(row['votes_cast']),
+                        "Score": str(row['influence_score'])
+                    })
+                widths = compute_column_widths(columns, width_rows)
+                inner_width = print_table_header(columns, widths)
                 for idx, row in enumerate(results, 1):
                     rank_color = Style.YELLOW if idx <= 3 else Style.WHITE
-                    print(f"{Style.CYAN}│{Style.RESET} {rank_color}{idx:<6}{Style.RESET} {Style.MAGENTA}{row['Username']:<22}{Style.RESET} {Style.WHITE}{row['land_parcels_owned']:<8}{Style.RESET} {Style.WHITE}{row['votes_cast']:<8}{Style.RESET} {Style.GREEN}{row['influence_score']:<8}{Style.RESET} {Style.CYAN}│{Style.RESET}")
-                
-                print(f"{Style.CYAN}└{'─' * 76}┘{Style.RESET}")
+                    values = [
+                        f"{rank_color}{idx}{Style.RESET}",
+                        f"{Style.MAGENTA}{row['Username'] or 'Unknown'}{Style.RESET}",
+                        f"{Style.WHITE}{row['land_parcels_owned']}{Style.RESET}",
+                        f"{Style.WHITE}{row['votes_cast']}{Style.RESET}",
+                        f"{Style.GREEN}{row['influence_score']}{Style.RESET}"
+                    ]
+                    print(build_table_row(values, widths))
+                print_table_footer(inner_width)
     
     except pymysql.Error as e:
         print(f"{Style.ERROR} Database error: {e}")
@@ -535,11 +597,11 @@ def voter_influence_report():
 
 def register_new_business():
     """WRITE Operation 6: Register a new business."""
-    print_box("🏢 REGISTER NEW BUSINESS")
+    print_box("REGISTER NEW BUSINESS")
     
-    business_name = input(f"{Style.CYAN}➤{Style.RESET} Business name: ").strip()
-    business_type = input(f"{Style.CYAN}➤{Style.RESET} Business type (Shop/Gallery/Venue/Service): ").strip()
-    owner_address = input(f"{Style.CYAN}➤{Style.RESET} Owner wallet address: ").strip()
+    business_name = input(f"{Style.CYAN}>{Style.RESET} Business name: ").strip()
+    business_type = input(f"{Style.CYAN}>{Style.RESET} Business type (Shop/Gallery/Venue/Service): ").strip()
+    owner_address = input(f"{Style.CYAN}>{Style.RESET} Owner wallet address: ").strip()
     
     if not all([business_name, business_type, owner_address]):
         print(f"{Style.ERROR} All fields are required.")
@@ -600,12 +662,12 @@ def register_new_business():
 
 def record_asset_sale():
     """WRITE Operation 7: Record an asset sale transaction and update ownership."""
-    print_box("💸 RECORD ASSET SALE TRANSACTION")
+    print_box("RECORD ASSET SALE TRANSACTION")
     
-    asset_id = input(f"{Style.CYAN}➤{Style.RESET} Asset ID: ").strip()
-    seller_address = input(f"{Style.CYAN}➤{Style.RESET} Seller wallet address: ").strip()
-    buyer_address = input(f"{Style.CYAN}➤{Style.RESET} Buyer wallet address: ").strip()
-    price = input(f"{Style.CYAN}➤{Style.RESET} Sale price (MANA): ").strip()
+    asset_id = input(f"{Style.CYAN}>{Style.RESET} Asset ID: ").strip()
+    seller_address = input(f"{Style.CYAN}>{Style.RESET} Seller wallet address: ").strip()
+    buyer_address = input(f"{Style.CYAN}>{Style.RESET} Buyer wallet address: ").strip()
+    price = input(f"{Style.CYAN}>{Style.RESET} Sale price (MANA): ").strip()
     
     if not all([asset_id, seller_address, buyer_address, price]):
         print(f"{Style.ERROR} All fields are required.")
@@ -682,9 +744,9 @@ def record_asset_sale():
 
 def delete_user():
     """WRITE Operation 8: Delete a user with cascading effects."""
-    print_box("🗑️  DELETE USER")
+    print_box("DELETE USER")
     
-    wallet = input(f"{Style.CYAN}➤{Style.RESET} Enter wallet address to delete: ").strip()
+    wallet = input(f"{Style.CYAN}>{Style.RESET} Enter wallet address to delete: ").strip()
     
     if not wallet:
         print(f"{Style.ERROR} Wallet address cannot be empty.")
@@ -770,10 +832,10 @@ def delete_user():
 
 def custom_sql_query():
     """Execute a custom SQL query."""
-    print_box("🔧 CUSTOM SQL QUERY")
+    print_box("CUSTOM SQL QUERY")
     print(f"{Style.WARNING} Use with caution. Only SELECT queries recommended.\n")
     
-    query = input(f"{Style.CYAN}➤{Style.RESET} Enter SQL query: ").strip()
+    query = input(f"{Style.CYAN}>{Style.RESET} Enter SQL query: ").strip()
     
     if not query:
         print(f"{Style.ERROR} Query cannot be empty.")
@@ -797,12 +859,12 @@ def custom_sql_query():
                     
                     if results:
                         columns = list(results[0].keys())
-                        print_table_header(columns)
-                        
+                        widths = compute_column_widths(columns, results)
+                        inner_width = print_table_header(columns, widths)
                         for row in results:
-                            values = [format_value(row[col])[:20] for col in columns]
-                            row_str = f"{Style.CYAN}{Style.BOX_V}{Style.RESET} " + f" {Style.GRAY}{Style.BOX_V}{Style.RESET} ".join(f"{Style.WHITE}{val:<20}{Style.RESET}" for val in values) + f" {Style.CYAN}{Style.BOX_V}{Style.RESET}"
-                            print(row_str)
+                            values = [f"{Style.WHITE}{format_value(row[col])}{Style.RESET}" for col in columns]
+                            print(build_table_row(values, widths))
+                        print_table_footer(inner_width)
             else:
                 conn.commit()
                 print(f"\n{Style.SUCCESS} Query executed successfully. Rows affected: {Style.GREEN}{cursor.rowcount}{Style.RESET}")
@@ -817,23 +879,29 @@ def custom_sql_query():
 def display_menu():
     """Displays the main menu."""
     print_banner()
-    
-    print(f"\n{Style.CYAN}┌{'─' * 76}┐{Style.RESET}")
-    print(f"{Style.CYAN}│{Style.RESET} {Style.BOLD}{Style.MAGENTA}{'MAIN MENU':^74}{Style.RESET} {Style.CYAN}│{Style.RESET}")
-    print(f"{Style.CYAN}├{'─' * 76}┤{Style.RESET}")
-    print(f"{Style.CYAN}│{Style.RESET}                                                                            {Style.CYAN}│{Style.RESET}")
-    print(f"{Style.CYAN}│{Style.RESET}  {Style.GREEN}1.{Style.RESET} {Style.WHITE}View all DAO proposals by a user{Style.RESET}{' ' * 39}{Style.CYAN}│{Style.RESET}")
-    print(f"{Style.CYAN}│{Style.RESET}  {Style.GREEN}2.{Style.RESET} {Style.WHITE}List businesses established after a date{Style.RESET}{' ' * 31}{Style.CYAN}│{Style.RESET}")
-    print(f"{Style.CYAN}│{Style.RESET}  {Style.GREEN}3.{Style.RESET} {Style.WHITE}Total MANA land sales in the last quarter{Style.RESET}{' ' * 30}{Style.CYAN}│{Style.RESET}")
-    print(f"{Style.CYAN}│{Style.RESET}  {Style.GREEN}4.{Style.RESET} {Style.WHITE}Search events by name keyword{Style.RESET}{' ' * 42}{Style.CYAN}│{Style.RESET}")
-    print(f"{Style.CYAN}│{Style.RESET}  {Style.GREEN}5.{Style.RESET} {Style.WHITE}Voter influence report{Style.RESET}{' ' * 49}{Style.CYAN}│{Style.RESET}")
-    print(f"{Style.CYAN}│{Style.RESET}  {Style.YELLOW}6.{Style.RESET} {Style.WHITE}Register new business{Style.RESET}{' ' * 50}{Style.CYAN}│{Style.RESET}")
-    print(f"{Style.CYAN}│{Style.RESET}  {Style.YELLOW}7.{Style.RESET} {Style.WHITE}Record an asset sale transaction{Style.RESET}{' ' * 39}{Style.CYAN}│{Style.RESET}")
-    print(f"{Style.CYAN}│{Style.RESET}  {Style.RED}8.{Style.RESET} {Style.WHITE}Delete a user{Style.RESET}{' ' * 58}{Style.CYAN}│{Style.RESET}")
-    print(f"{Style.CYAN}│{Style.RESET}  {Style.MAGENTA}9.{Style.RESET} {Style.WHITE}Custom SQL query{Style.RESET}{' ' * 55}{Style.CYAN}│{Style.RESET}")
-    print(f"{Style.CYAN}│{Style.RESET}  {Style.GRAY}q.{Style.RESET} {Style.WHITE}Quit{Style.RESET}{' ' * 67}{Style.CYAN}│{Style.RESET}")
-    print(f"{Style.CYAN}│{Style.RESET}                                                                            {Style.CYAN}│{Style.RESET}")
-    print(f"{Style.CYAN}└{'─' * 76}┘{Style.RESET}\n")
+    width = 80
+    print(f"\n{Style.CYAN}{Style.BOX_TL}{Style.BOX_H * (width - 2)}{Style.BOX_TR}{Style.RESET}")
+    title = "MAIN MENU".center(width - 2)
+    title_colored = title.replace("MAIN MENU", f"{Style.BOLD}{Style.MAGENTA}MAIN MENU{Style.RESET}", 1)
+    print_box_line(title_colored, width)
+    print_box_separator(width)
+    print_box_line("", width)
+    menu_items = [
+        f"{Style.GREEN}1.{Style.RESET} {Style.WHITE}View all DAO proposals by a user{Style.RESET}",
+        f"{Style.GREEN}2.{Style.RESET} {Style.WHITE}List businesses established after a date{Style.RESET}",
+        f"{Style.GREEN}3.{Style.RESET} {Style.WHITE}Total MANA land sales in the last quarter{Style.RESET}",
+        f"{Style.GREEN}4.{Style.RESET} {Style.WHITE}Search events by name keyword{Style.RESET}",
+        f"{Style.GREEN}5.{Style.RESET} {Style.WHITE}Voter influence report{Style.RESET}",
+        f"{Style.YELLOW}6.{Style.RESET} {Style.WHITE}Register new business{Style.RESET}",
+        f"{Style.YELLOW}7.{Style.RESET} {Style.WHITE}Record an asset sale transaction{Style.RESET}",
+        f"{Style.RED}8.{Style.RESET} {Style.WHITE}Delete a user{Style.RESET}",
+        f"{Style.MAGENTA}9.{Style.RESET} {Style.WHITE}Custom SQL query{Style.RESET}",
+        f"{Style.GRAY}q.{Style.RESET} {Style.WHITE}Quit{Style.RESET}"
+    ]
+    for item in menu_items:
+        print_box_line(item, width)
+    print_box_line("", width)
+    print(f"{Style.CYAN}{Style.BOX_BL}{Style.BOX_H * (width - 2)}{Style.BOX_BR}{Style.RESET}\n")
 
 
 def main():
@@ -848,8 +916,8 @@ def main():
     print(f"{Style.INFO} Host is fixed to: {Style.BOLD}localhost{Style.RESET}")
     
     try:
-        user = input(f"{Style.CYAN}➤{Style.RESET} Enter MySQL Username: ").strip()
-        password = getpass(f"{Style.CYAN}➤{Style.RESET} Enter MySQL Password: ")
+        user = input(f"{Style.CYAN}>{Style.RESET} Enter MySQL Username: ").strip()
+        password = getpass(f"{Style.CYAN}>{Style.RESET} Enter MySQL Password: ")
         
         DB_CREDENTIALS['user'] = user
         DB_CREDENTIALS['password'] = password
@@ -868,11 +936,11 @@ def main():
         print("\nAuthentication cancelled.")
         return
     
-    input(f"{Style.CYAN}➤{Style.RESET} Press Enter to continue...")
+    input(f"{Style.CYAN}>{Style.RESET} Press Enter to continue...")
     
     while True:
         display_menu()
-        choice = input(f"{Style.CYAN}➤{Style.RESET} Select an option: ").strip().lower()
+        choice = input(f"{Style.CYAN}>{Style.RESET} Select an option: ").strip().lower()
         
         if choice == '1':
             view_dao_proposals_by_user()
@@ -894,14 +962,14 @@ def main():
             custom_sql_query()
         elif choice == 'q':
             print(f"\n{Style.CYAN}{'═' * 80}{Style.RESET}")
-            print(f"{Style.MAGENTA}{Style.BOLD}{'👋 Thank you for using MINI WORLD - GENESIS CITY!':^80}{Style.RESET}")
+            print(f"{Style.MAGENTA}{Style.BOLD}{'Thank you for using MINI WORLD - GENESIS CITY!':^80}{Style.RESET}")
             print(f"{Style.GREEN}{'Goodbye!':^80}{Style.RESET}")
             print(f"{Style.CYAN}{'═' * 80}{Style.RESET}\n")
             break
         else:
             print(f"\n{Style.ERROR} Invalid option. Please try again.")
         
-        input(f"\n{Style.CYAN}➤{Style.RESET} Press Enter to continue...")
+        input(f"\n{Style.CYAN}>{Style.RESET} Press Enter to continue...")
 
 
 if __name__ == "__main__":
